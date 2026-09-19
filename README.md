@@ -27,7 +27,6 @@ comment, or edit — powered by a CRDT sync engine so edits never conflict, even
 13. [Roadmap](#roadmap)
 14. [Open decisions](#open-decisions)
 15. [Contributing](#contributing)
-16. [License](#license)
 
 ---
 
