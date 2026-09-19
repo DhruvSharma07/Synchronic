@@ -6,7 +6,6 @@ A Google Docs–style collaborative document editor: multiple people can edit th
 document simultaneously, see each other's cursors live, comment, and control who can view,
 comment, or edit — powered by a CRDT sync engine so edits never conflict, even offline.
 
-*(Working name — swap throughout the repo once finalized.)*
 
 ---
 
@@ -82,15 +81,15 @@ the MVP.
 ## Architecture
 
 ```
-                    Browser client (React + Tiptap + Yjs)
-                               |            |
-                     REST calls|            |WebSocket
-                               v            v
-                REST API                Realtime sync server
-             (FastAPI: auth,          (FastAPI + pycrdt-websocket:
-              docs, sharing)            Yjs rooms, presence)
-                    |                        |
-                    +----------+  +----------+
+                 Browser client (React + Tiptap + Yjs)
+                          |                  |
+                   REST calls|            |WebSocket
+                       v                      v
+                   REST API                Realtime sync server
+               (FastAPI: auth,          (FastAPI + pycrdt-websocket:
+                docs, sharing)            Yjs rooms, presence)
+                     |                        |
+                     +----------+  +----------+
                                v  v
                         Postgres + Redis
                  (metadata, permissions, cache)
