@@ -1,0 +1,63 @@
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  background: #faf9f7;
+  color: #1a1a1a;
+}
+
+.app-shell { max-width: 820px; margin: 0 auto; padding: 24px; }
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.app-title { font-weight: 600; letter-spacing: 0.02em; }
+.app-user { font-weight: 500; }
+
+.editor-shell {
+  border: 1px solid #e5e2dd;
+  border-radius: 10px;
+  padding: 24px;
+  min-height: 400px;
+  background: #fff;
+}
+
+.ProseMirror { outline: none; line-height: 1.7; font-size: 15px; }
+
+/* Collaborator cursor rendered by @tiptap/extension-collaboration-cursor */
+.collaboration-cursor__caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 1.5px solid;
+  border-right: 1.5px solid;
+  word-break: normal;
+  pointer-events: none;
+  animation: caret-blink 1s step-end infinite;
+}
+
+.collaboration-cursor__label {
+  position: absolute;
+  top: -1.4em;
+  left: -1px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+  white-space: nowrap;
+  border-radius: 4px 4px 4px 0;
+  padding: 2px 6px;
+  color: #fff;
+}
+
+@keyframes caret-blink {
+  0%, 45% { opacity: 1; }
+  50%, 95% { opacity: 0; }
+  100% { opacity: 1; }
+}

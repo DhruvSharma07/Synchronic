@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: syncronix
+      POSTGRES_PASSWORD: syncronix
+      POSTGRES_DB: syncronix
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  api:
+    build: ./apps/server/api
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./apps/server/api:/app
+
+  sync:
+    build: ./apps/server/sync
+    env_file: .env
+    ports:
+      - "8001:8001"
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./apps/server/sync:/app
+
+volumes:
+  db_data:
