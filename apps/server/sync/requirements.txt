@@ -1,3 +1,11 @@
+fastapi>=0.115,<0.116
 uvicorn[standard]>=0.30,<0.31
-pycrdt>=0.9,<1.0
-pycrdt-websocket>=0.15,<0.17
+pydantic>=2.9,<3
+pydantic[email]>=2.9,<3
+python-dotenv>=1.0,<2
+sqlalchemy[asyncio]>=2.0,<2.1
+asyncpg>=0.29,<0.30
+passlib>=1.7,<1.8
+bcrypt>=4.0,<4.1
+python-jose[cryptography]>=3.3,<3.4
+redis>=5.0,<6.0
