@@ -47,3 +47,15 @@ class Base(DeclarativeBase):
 async def get_db():
     async with SessionLocal() as session:
         yield session
+
+async def init_models() -> None:
+    """Create tables from the models below if they don't exist yet.
+
+    This is a Phase 1 shortcut so the scaffold works without extra setup.
+    Once the schema stabilizes, replace this with real Alembic migrations
+    under infra/migrations (see README "Getting started") - auto-creating
+    tables from models is fine for early dev, not for a team that needs
+    repeatable, reviewable schema changes.
+    """
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
