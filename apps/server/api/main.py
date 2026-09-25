@@ -1,5 +1,5 @@
 """
-Syncronix REST API.
+Synchronic REST API.
 
 Auth and user endpoints are now real: Postgres-backed via SQLAlchemy,
 hashed passwords, JWT access/refresh tokens with Redis-backed revocation.
@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Syncronix API", lifespan=lifespan)
+app = FastAPI(title="Synchronic API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

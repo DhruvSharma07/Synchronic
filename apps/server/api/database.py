@@ -17,7 +17,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://syncronix:syncronix@127.0.0.1:5432/syncronix"
+    "postgresql://synchronic:synchronic@127.0.0.1:5432/synchronic"
 )
 
 if DATABASE_URL.startswith("postgresql://"):

@@ -25,7 +25,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <span className="app-title">Syncronix</span>
+        <span className="app-title">Synchronic</span>
         <span className="app-user" style={{ color: user.color }}>
           {user.name}
         </span>

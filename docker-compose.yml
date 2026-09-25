@@ -4,9 +4,9 @@ services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_USER: syncronix
-      POSTGRES_PASSWORD: syncronix
-      POSTGRES_DB: syncronix
+      POSTGRES_USER: synchronic
+      POSTGRES_PASSWORD: synchronic
+      POSTGRES_DB: synchronic
     ports:
       - "5432:5432"
     volumes:
