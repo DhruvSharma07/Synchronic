@@ -42,6 +42,9 @@ rather than a custom Operational Transformation engine, which means:
 - The backend can be Python end-to-end (FastAPI), while the editor surface itself
   (unavoidably) runs in the browser via Tiptap/ProseMirror.
 
+<img width="1590" height="795" alt="image" src="https://github.com/user-attachments/assets/fb9abb9c-24fc-4c4a-938e-c1361443296e" />
+
+
 This README is the single reference for scope, architecture, and setup. Keep it up to date
 as decisions change — see [Open decisions](#open-decisions) for things still unresolved.
 
