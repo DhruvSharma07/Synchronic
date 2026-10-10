@@ -1,8 +1,8 @@
 """
 POST /auth/register, /auth/login, /auth/logout, /auth/refresh
 """
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -18,7 +18,9 @@ from schemas import (
 )
 from security import (
     create_access_token,
+    clear_rate_limit,
     create_refresh_token,
+    enforce_rate_limit,
     hash_password,
     revoke_refresh_token,
     verify_password,
@@ -30,7 +32,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    existing = await db.execute(select(User).where(User.email == payload.email))
+    existing = await db.execute(
+        select(User).where(func.lower(User.email) == payload.email.lower())
+    )
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "An account with that email already exists")
 
@@ -46,8 +50,14 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == payload.email))
+async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depends(get_db)):
+    client_ip = request.client.host if request.client else "unknown"
+    limit_key = f"ratelimit:login:{client_ip}:{payload.email.lower()}"
+    await enforce_rate_limit(limit_key, limit=10, window_seconds=60)
+
+    result = await db.execute(
+        select(User).where(func.lower(User.email) == payload.email.lower())
+    )
     user = result.scalar_one_or_none()
 
     # Same error for "no such user" and "wrong password" - distinguishing
@@ -55,6 +65,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     if user is None or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect email or password")
 
+    await clear_rate_limit(limit_key)
     access_token = create_access_token(user.id)
     refresh_token = await create_refresh_token(user.id)
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)

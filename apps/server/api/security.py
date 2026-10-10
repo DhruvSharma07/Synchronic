@@ -10,6 +10,7 @@ issuing one writes its jti to Redis, and /auth/logout deletes it. Without
 that check, a leaked refresh token would stay valid until it expired
 naturally no matter what logout did, since JWTs can't be "un-signed".
 """
+import logging
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -25,13 +26,22 @@ from database import get_db
 from models import User
 from redis_client import get_redis
 
-JWT_SECRET = os.getenv("JWT_SECRET", "change-me-dev-secret")
+logger = logging.getLogger("synchronic.security")
+
+_DEV_SECRET = "change-me-dev-secret"
+JWT_SECRET = os.getenv("JWT_SECRET", _DEV_SECRET)
+if os.getenv("APP_ENV", "development") == "production" and (
+    JWT_SECRET == _DEV_SECRET or len(JWT_SECRET) < 32
+):
+    raise RuntimeError("JWT_SECRET must be set to a random value of 32+ characters in production")
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_TTL = timedelta(minutes=15)
 REFRESH_TOKEN_TTL = timedelta(days=30)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-bearer_scheme = HTTPBearer()
+# auto_error=False so a missing header yields 401 (not FastAPI's default 403),
+# which is what the client uses to decide to refresh its token.
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def hash_password(password: str) -> str:
@@ -78,7 +88,9 @@ def _decode_token(token: str, expected_type: str) -> dict:
 
 async def verify_refresh_token(token: str) -> tuple[uuid.UUID, str]:
     payload = _decode_token(token, "refresh")
-    jti = payload["jti"]
+    jti = payload.get("jti")
+    if not jti:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
     redis = await get_redis()
     stored_user_id = await redis.get(f"refresh:{jti}")
     if stored_user_id is None:
@@ -92,12 +104,35 @@ async def revoke_refresh_token(jti: str) -> None:
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
+    if credentials is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
     payload = _decode_token(credentials.credentials, "access")
-    result = await db.execute(select(User).where(User.id == uuid.UUID(payload["sub"])))
+    try:
+        user_id = uuid.UUID(payload["sub"])
+    except (KeyError, ValueError):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User no longer exists")
     return user
+
+
+async def enforce_rate_limit(key: str, limit: int = 10, window_seconds: int = 60) -> None:
+    """Fixed-window counter in Redis; raises 429 once `limit` is exceeded."""
+    redis = await get_redis()
+    count = await redis.incr(key)
+    if count == 1:
+        await redis.expire(key, window_seconds)
+    if count > limit:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS, "Too many attempts, please try again shortly"
+        )
+
+
+async def clear_rate_limit(key: str) -> None:
+    redis = await get_redis()
+    await redis.delete(key)

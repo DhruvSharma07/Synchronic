@@ -1,47 +1,71 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
-import * as Y from 'yjs'
-import { WebsocketProvider } from 'y-websocket'
+import type * as Y from 'yjs'
+import type { WebsocketProvider } from 'y-websocket'
+import { Toolbar } from '../components/Toolbar'
 
-const SYNC_SERVER_URL = import.meta.env.VITE_SYNC_SERVER_URL || 'ws://localhost:8001'
+export interface CollabUser {
+  id: string
+  name: string
+  color: string
+  delay: number
+}
 
-type User = { name: string; color: string }
+// Caret blinks via border-color so the name tag stays solid (see styles.css);
+// each user gets a different animation-delay so carets don't flash in sync.
+function renderCursor(user: Record<string, unknown>): HTMLElement {
+  const caret = document.createElement('span')
+  caret.classList.add('collaboration-cursor__caret')
+  caret.style.setProperty('--cursor-color', String(user.color))
+  caret.style.animationDelay = `${Number(user.delay) || 0}s`
 
-export function Editor({ documentId, user }: { documentId: string; user: User }) {
-  // One Yjs doc + provider per documentId. Recreated only if documentId
-  // changes, not on every render.
-  const ydoc = useMemo(() => new Y.Doc(), [documentId])
-  const provider = useMemo(
-    () => new WebsocketProvider(SYNC_SERVER_URL, documentId, ydoc),
-    [documentId, ydoc],
-  )
+  const label = document.createElement('div')
+  label.classList.add('collaboration-cursor__label')
+  label.style.backgroundColor = String(user.color)
+  label.textContent = String(user.name)
 
+  caret.appendChild(label)
+  return caret
+}
+
+export function Editor({
+  ydoc,
+  provider,
+  user,
+  canEdit,
+}: {
+  ydoc: Y.Doc
+  provider: WebsocketProvider
+  user: CollabUser
+  canEdit: boolean
+}) {
   const editor = useEditor(
     {
+      editable: canEdit,
       extensions: [
-        // Yjs owns undo/redo history once Collaboration is active - the
-        // StarterKit history extension would fight with it otherwise.
+        // Yjs owns undo/redo once Collaboration is active; StarterKit's history would fight it.
         StarterKit.configure({ history: false }),
         Collaboration.configure({ document: ydoc }),
-        CollaborationCursor.configure({ provider, user }),
+        CollaborationCursor.configure({ provider, user, render: renderCursor }),
       ],
     },
     [ydoc, provider],
   )
 
+  // Role can change while the document is open (the server also enforces this).
   useEffect(() => {
-    return () => {
-      provider.destroy()
-      ydoc.destroy()
-    }
-  }, [provider, ydoc])
+    editor?.setEditable(canEdit)
+  }, [editor, canEdit])
 
   return (
-    <div className="editor-shell">
-      <EditorContent editor={editor} />
+    <div className="editor-wrap">
+      {canEdit && <Toolbar editor={editor} />}
+      <div className={`editor-shell${canEdit ? '' : ' editor-shell--readonly'}`}>
+        <EditorContent editor={editor} />
+      </div>
     </div>
   )
 }

@@ -1,53 +1,69 @@
-version: "3.9"
+# Local development: hot-reloading backends with source bind-mounted.
+# Frontend: `cd apps/client && npm install && npm run dev` (Vite proxies /api and /sync).
+# For a production-style stack see docker-compose.prod.yml.
+name: synchronic
 
 services:
   db:
-    image: postgres:16
+    image: postgres:16-alpine
     environment:
-      POSTGRES_USER: synchronic
-      POSTGRES_PASSWORD: synchronic
-      POSTGRES_DB: synchronic
+      POSTGRES_USER: ${POSTGRES_USER:-synchronic}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-synchronic}
+      POSTGRES_DB: ${POSTGRES_DB:-synchronic}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   redis:
-    image: redis:7
+    image: redis:7-alpine
     ports:
-      - "6379:6379"
-
-  pgadmin:
-    image: dpage/pgadmin4
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
-    depends_on:
-      - db
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   api:
     build: ./apps/server/api
     env_file: .env
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
-      - redis
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./apps/server/api:/app
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
 
   sync:
     build: ./apps/server/sync
     env_file: .env
-    ports:
-      - "8001:8001"
-    depends_on:
-      - db
-      - redis
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload --no-access-log
     volumes:
       - ./apps/server/sync:/app
+    ports:
+      - "127.0.0.1:8001:8001"
+    depends_on:
+      api: { condition: service_healthy } # api creates the tables on startup
+      redis: { condition: service_healthy }
+
+  pgadmin:
+    image: dpage/pgadmin4
+    profiles: ["tools"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+    ports:
+      - "127.0.0.1:5050:80"
+    depends_on:
+      db: { condition: service_healthy }
 
 volumes:
   db_data:

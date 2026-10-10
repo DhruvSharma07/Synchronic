@@ -39,10 +39,11 @@ async def search_users(
     _current_user: User = Depends(get_current_user),  # must be signed in to search
     db: AsyncSession = Depends(get_db),
 ):
-    pattern = f"%{q}%"
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{escaped}%"
     result = await db.execute(
         select(User)
-        .where(or_(User.email.ilike(pattern), User.display_name.ilike(pattern)))
+        .where(or_(User.email.ilike(pattern, escape="\\"), User.display_name.ilike(pattern, escape="\\")))
         .limit(10)
     )
     return result.scalars().all()

@@ -1,41 +1,66 @@
 """
-Synchronic REST API.
+Synchronic REST API: auth, users, documents and sharing.
 
-Auth and user endpoints are now real: Postgres-backed via SQLAlchemy,
-hashed passwords, JWT access/refresh tokens with Redis-backed revocation.
-See security.py, routers/auth.py, routers/users.py.
-
-Document endpoints are still the Phase 0 in-memory stub below - they don't
-survive a restart and have no permission checks yet. That's next: replace
-`_documents` with the `Document`/`DocumentPermission` models from
-docs/requirements.md and add the require_role() checks described in the
-README "Permissions & access control" section.
+Live document content is not served here - that is the sync service
+(apps/server/sync). This API owns metadata and permissions, and tells the sync
+service about access changes over Redis pub/sub.
 """
-import uuid
+import asyncio
+import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.middleware.gzip import GZipMiddleware
+from sqlalchemy import text
 
-from database import init_models
-from routers import auth, users
+from database import engine, init_models
+from redis_client import close_redis, get_redis
+from routers import auth, documents, users
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger("synchronic.api")
+
+IS_PRODUCTION = os.getenv("APP_ENV", "development") == "production"
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
+
+
+async def _init_db_with_retry(attempts: int = 30, delay: float = 1.0) -> None:
+    for attempt in range(1, attempts + 1):
+        try:
+            await init_models()
+            return
+        except Exception as exc:  # DB still booting, or a concurrent worker won the race
+            if attempt == attempts:
+                raise
+            logger.warning("Database not ready (%d/%d): %s", attempt, attempts, exc)
+            await asyncio.sleep(delay)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Phase 1 shortcut: create tables straight from the models instead of
-    # running migrations - see database.py for why this isn't the long-term
-    # answer.
-    await init_models()
+    await _init_db_with_retry()
     yield
+    await close_redis()
+    await engine.dispose()
 
 
-app = FastAPI(title="Synchronic API", lifespan=lifespan)
+app = FastAPI(
+    title="Synchronic API",
+    lifespan=lifespan,
+    docs_url=None if IS_PRODUCTION else "/docs",
+    redoc_url=None if IS_PRODUCTION else "/redoc",
+    openapi_url=None if IS_PRODUCTION else "/openapi.json",
+)
 
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -43,42 +68,23 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(documents.router)
 
 
 @app.get("/health")
 def health():
+    """Liveness: the process is up."""
     return {"status": "ok"}
 
 
-# --- Documents (still an in-memory stub) ------------------------------------
-
-_documents: dict[str, dict] = {}
-
-
-class CreateDocumentRequest(BaseModel):
-    title: str
-    owner_id: str
-
-
-@app.post("/documents")
-def create_document(payload: CreateDocumentRequest):
-    doc_id = str(uuid.uuid4())
-    _documents[doc_id] = {
-        "id": doc_id,
-        "title": payload.title,
-        "owner_id": payload.owner_id,
-    }
-    return _documents[doc_id]
-
-
-@app.get("/documents")
-def list_documents():
-    return list(_documents.values())
-
-
-@app.get("/documents/{doc_id}")
-def get_document(doc_id: str):
-    doc = _documents.get(doc_id)
-    if not doc:
-        raise HTTPException(status_code=404, detail="Not found")
-    return doc
+@app.get("/health/ready")
+async def ready():
+    """Readiness: Postgres and Redis are reachable."""
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        await (await get_redis()).ping()
+    except Exception:
+        logger.exception("Readiness check failed")
+        raise HTTPException(503, "Not ready")
+    return {"status": "ok"}

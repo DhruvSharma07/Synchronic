@@ -1,36 +1,32 @@
-import { useMemo } from 'react'
-import { Editor } from './editor/Editor'
+import { useEffect } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { DocumentPage } from './pages/DocumentPage'
+import { Documents } from './pages/Documents'
+import { Login } from './pages/Login'
+import { useAuth } from './state/auth'
 
-const COLORS = ['#e64980', '#12b886', '#4263eb', '#f76707']
-
-function randomUser() {
-  const id = Math.floor(Math.random() * 1000)
-  return {
-    name: `Guest ${id}`,
-    color: COLORS[id % COLORS.length],
-  }
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const status = useAuth((s) => s.status)
+  const location = useLocation()
+  if (status === 'loading') return <p className="muted center">Loading…</p>
+  if (status === 'anon') return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  return <>{children}</>
 }
 
 export default function App() {
-  // One user identity per browser tab, so opening two tabs looks like two
-  // different collaborators - replace with the real logged-in user once
-  // auth is wired up in Phase 1.
-  const user = useMemo(randomUser, [])
-
-  // Hardcoded for Phase 0 - there's no document list/routing yet, so every
-  // tab joins the same room. Swap for a real document id once /documents
-  // has a UI.
-  const documentId = 'phase-0-demo-doc'
+  const init = useAuth((s) => s.init)
+  useEffect(() => {
+    void init()
+  }, [init])
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <span className="app-title">Synchronic</span>
-        <span className="app-user" style={{ color: user.color }}>
-          {user.name}
-        </span>
-      </header>
-      <Editor documentId={documentId} user={user} />
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<RequireAuth><Documents /></RequireAuth>} />
+        <Route path="/d/:documentId" element={<RequireAuth><DocumentPage /></RequireAuth>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
