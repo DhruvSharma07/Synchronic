@@ -9,7 +9,7 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -31,7 +31,7 @@ jobs:
   client:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -50,9 +50,10 @@ jobs:
       REDIS_PASSWORD: ci
       JWT_SECRET: 0123456789abcdef0123456789abcdef
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Validate compose files
         run: |
+          cp .env.example .env   # dev compose reads env_file: .env (gitignored, so absent in CI)
           docker compose -f docker-compose.yml config -q
           docker compose -f docker-compose.prod.yml config -q
       - name: Build production images
